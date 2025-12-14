@@ -205,3 +205,21 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+
+# Large Datasets
+data/
+*.zip
+*.tar.gz
+
+# Model Checkpoints
+models/
+*.pt
+*.pth
+*.ckpt
+*.npy
+
+# Embeddings & Indexes
+embeddings/
+faiss_index/
