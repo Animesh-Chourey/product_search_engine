@@ -17,3 +17,10 @@ The dataset contains 44,000+ fashion product images along with structured metada
 - Attributes such as gender, season, color, and usage
 
 Link: [Fashion Product Images (Small)](https://www.kaggle.com/datasets/paramaggarwal/fashion-product-images-small)
+
+
+### Step - 1 : Embedding Pipeline
+- Implemented reusable CLIP-based embedding pipeline
+- Centralized image and text embedding logic
+- Added batch processing for scalable offline embedding
+- Ensured cosine-normalized embeddings for retrieval
