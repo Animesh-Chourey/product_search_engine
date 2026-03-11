@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import torch
+from PIL import Image
 from transformers import CLIPProcessor, CLIPModel
 
 class ProductSearchPipeline:
@@ -130,4 +131,4 @@ class ProductSearchPipeline:
 
             all_embeddings.append(self._normalize(image_features))
 
-            return np.vstack(all_embeddings)
+        return np.vstack(all_embeddings)

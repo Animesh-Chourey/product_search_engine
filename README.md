@@ -24,3 +24,12 @@ Link: [Fashion Product Images (Small)](https://www.kaggle.com/datasets/paramagga
 - Centralized image and text embedding logic
 - Added batch processing for scalable offline embedding
 - Ensured cosine-normalized embeddings for retrieval
+
+### Step - 2 : Vector Search
+Built FAISS vector indexes to enable fast nearest-neighbor search over CLIP embeddings.
+
+Indexes created:
+- text_index.faiss
+- image_index.faiss
+
+These indexes allow millisecond-level similarity search.
