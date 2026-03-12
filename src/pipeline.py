@@ -2,6 +2,7 @@ import os
 import numpy as np
 import torch
 from PIL import Image
+import faiss
 from transformers import CLIPProcessor, CLIPModel
 
 class ProductSearchPipeline:
@@ -12,6 +13,9 @@ class ProductSearchPipeline:
         self.model = None
         self.processor = None
         
+        self.text_index = None
+        self.image_index = None
+    
 
     def load_models(self):
         """
@@ -132,3 +136,45 @@ class ProductSearchPipeline:
             all_embeddings.append(self._normalize(image_features))
 
         return np.vstack(all_embeddings)
+    
+
+    def load_indexes(self):
+        """
+            Load FAISS indexes from disk
+
+            This allows the search system to quickly retrieve 
+            nearest product vectors without recomputing embeddings
+        """
+
+        if self.text_index is None:
+            text_index_path = os.path.join(
+                self.project_dir, "indexes/text_index.faiss"
+            )
+        
+            image_index_path = os.path.join(
+                self.project_dir, "indexes/image_index.faiss"
+            )
+
+        self.text_index = faiss.read_index(text_index_path)
+        self.image_index = faiss.read_index(image_index_path)
+
+    def search_text(self, query_text, top_k = 10):
+        """
+            Search products using a text query
+
+            Steps:
+                1. Convert the query to CLIP embeddings
+                2. Search FAISS index
+                3. Return top matching product indices
+        """
+
+        self.load_models()
+        self.load_indexes()
+
+        # Convert the query into embeddings
+        query_embeddings = self.embed_text(query_text).reshape(1, -1)
+
+        # Search FAISS index
+        scores, indices = self.text_index.search(query_embeddings, top_k)
+
+        return indices[0], scores[0]
