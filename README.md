@@ -33,3 +33,12 @@ Indexes created:
 - image_index.faiss
 
 These indexes allow millisecond-level similarity search.
+
+### Step - 3 : Multimodal Search Engine
+
+Implemented full search pipeline:
+- Text search
+- Image search
+- Multimodal fusion search
+
+Search uses FAISS vector indexes built from CLIP embeddings.

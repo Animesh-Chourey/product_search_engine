@@ -172,9 +172,81 @@ class ProductSearchPipeline:
         self.load_indexes()
 
         # Convert the query into embeddings
+        # Reshape it into 2-d array so that FIASS library can perform similarity search
         query_embeddings = self.embed_text(query_text).reshape(1, -1)
 
         # Search FAISS index
+        # Get "similarity scores" between query embeddings and top_k most similar text embeddings found in the index
+        # Get "indices" corresponding to the top_k similar image embeddings.
+        # We can use these indices to retrieve the most similar texts
         scores, indices = self.text_index.search(query_embeddings, top_k)
 
         return indices[0], scores[0]
+
+    
+    def search_image(self, image, top_k = 10):
+        """
+            Search products using an input image
+
+            Steps:
+                1. Convert input image into embeddings
+                2. Query FAISS image index
+                3. Return top matching products
+        """
+
+        self.load_models()
+        self.load_indexes()
+
+        # Convert the input image into vector representation (embeddings)
+        # Reshape it into 2-d array so that FIASS library can perform similarity search
+        query_image_embeddings = self.embed_image(image).reshape(1, -1)
+
+        # Get "similarity scores" between query embeddings and top_k most similar image embeddings found in the index
+        # Get "indices" corresponding to the top_k similar image embeddings.
+        # We can use these indices to retrieve the most similar images or their metadata
+        scores, indices = self.image_index.search(query_image_embeddings, top_k)
+
+        return indices[0], scores[0]
+
+
+    def search_multimodal(self, text = None, image = None, top_k = 10, alpha = 0.5):
+        """
+            Multimodal search combining text and image queries
+
+            alpha = weight for the text
+            1 - alpha = weight for image
+        """
+
+        self.load_models()
+        self.load_indexes()
+
+        final_scores = {}
+
+        # if text query is provided
+        # find similar items related to text provided
+        # Took larger pool (top_k*2) of candidates to ensure not missing items scoring high in one modality
+        # but not make the cut off  in the initial individual search    
+        if text is not None:
+            text_indices, text_scores = self.search_text(text, top_k*2)
+
+            for idx, score in zip(text_indices, text_scores):
+                final_scores[idx] = final_scores.get(idx, 0) + (alpha * score)
+        
+        # if image query is provided
+        # finds similar items related to image provided
+        # Took larger pool (top_k*2) of candidates to ensure not missing items scoring high in one modality
+        # but not make the cut off  in the initial individual search
+        if image is not None:
+            image_indices, image_scores = self.search_image(image, top_k * 2)
+
+            for idx, score in zip(image_indices, image_scores):
+                final_scores[idx] = final_scores.get(idx, 0) + ((1-alpha) * score)
+
+        # sort the tuples based on the 2nd element of each tuple (i.e. here "scores") 
+        ranked_results = sorted(
+            final_scores.items(),
+            key = lambda x : x[1],
+            reverse = True
+        )
+
+        return ranked_results[: top_k]
