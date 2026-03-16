@@ -29,7 +29,7 @@ class ProductSearchPipeline:
             ).to(self.device)
 
             self.processor = CLIPProcessor.from_pretrained(
-                "openai-clip-vit-base-patch32"
+                "openai/clip-vit-base-patch32"
             )
     
     
@@ -40,19 +40,35 @@ class ProductSearchPipeline:
     @staticmethod
     def _normalize(embedding : torch.Tensor) -> np.ndarray:
         """
-        L2-normalize the embeddings for cosine similarity
+            L2-normalize the embeddings for cosine similarity
+
+            This ensures that dot product = cosine similarity,
+            which is required for FAISS inner-product search.
         """
+        
+        # If embedding is a HuggingFace model output, extract tensor
+        if hasattr(embedding, "pooler_output"):
+            embedding = embedding.pooler_output
+
+        # Ensure the embedding is a tensor
+        if not isinstance(embedding, torch.Tensor):
+            embedding = torch.tensor(embedding)
+
+        # Normalize the vectors
         embedding = embedding / embedding.norm(dim = -1, keepdim = True)
-        return embedding.cpu().numpy()
+
+        # Convert to numpy float32 for FAISS
+        return embedding.detach().cpu().numpy()
     
     
     def embed_text(self, text : str) -> np.ndarray:
         """
-        Generate CLIP embeddings for a single text input 
+        Generate CLIP embeddings for a single text input query
         """
 
         self.load_models()
         
+        # Prepare input for CLIP
         inputs = self.processor(
             text = [text],
             return_tensors = "pt",
@@ -61,9 +77,11 @@ class ProductSearchPipeline:
         ).to(self.device)
 
         with torch.no_grad():
+            # Use CLIP feature extractor
             text_features = self.model.get_text_features(**inputs)
 
         return self._normalize(text_features)[0]
+    
 
     def embed_image(self, image: Image.Image) -> np.ndarray:
         """
@@ -78,6 +96,7 @@ class ProductSearchPipeline:
         ).to(self.device)
 
         with torch.no_grad():
+            # Use CLIP feature extractor
             image_features = self.model.get_image_features(**inputs)
 
         return self._normalize(image_features)[0]
@@ -143,10 +162,10 @@ class ProductSearchPipeline:
             Load FAISS indexes from disk
 
             This allows the search system to quickly retrieve 
-            nearest product vectors without recomputing embeddings
+            nearest product vectors without recomputing embeddings every time
         """
 
-        if self.text_index is None:
+        if self.text_index is None or self.image_index is None:
             text_index_path = os.path.join(
                 self.project_dir, "indexes/text_index.faiss"
             )
@@ -155,8 +174,9 @@ class ProductSearchPipeline:
                 self.project_dir, "indexes/image_index.faiss"
             )
 
-        self.text_index = faiss.read_index(text_index_path)
-        self.image_index = faiss.read_index(image_index_path)
+            # Load FAISS indexes
+            self.text_index = faiss.read_index(text_index_path)
+            self.image_index = faiss.read_index(image_index_path)
 
     def search_text(self, query_text, top_k = 10):
         """
