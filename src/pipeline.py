@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 import torch
 from PIL import Image
 import faiss
@@ -15,6 +16,20 @@ class ProductSearchPipeline:
         
         self.text_index = None
         self.image_index = None
+
+        self.metadata = None
+        self.query_cache = {}
+
+        # Mapping of keywords to product categories
+        self.category_keywords = {
+            "jacket" : ["jacket", "coat", "jerkin", "tuxedo"],
+            "shirt": ["shirt", "tshirt", "t-shirt"],
+            "shoes": ["shoe", "sneaker", "trainer", "running", "jogging"],
+            "jeans": ["jeans", "denim"],
+            "dress": ["dress", "gown"],
+            "watch": ["watch", "wristwatch", "pocket-watch"],
+            "bag": ["bag", "handbag", "backpack", "carrier-bag"]
+        }
     
 
     def load_models(self):
@@ -31,6 +46,44 @@ class ProductSearchPipeline:
             self.processor = CLIPProcessor.from_pretrained(
                 "openai/clip-vit-base-patch32"
             )
+
+    def load_metadata(self):
+        """
+            Load product metadata for filtering search results.
+
+            This includes:
+            - articleType
+            - productDisplayName 
+        """
+            
+        if not hasattr(self, "metadata") or self.metadata is None:
+            metadata_path = os.path.join(
+                self.project_dir,
+                "data/cleaned_products.csv"
+            )
+
+            self.metadata = pd.read_csv(metadata_path)
+
+
+    def detect_query_category(self, query_text):
+        """
+            Improve category detection using token based matching
+
+            Handles variation like:
+            - "running sneakers"
+            - "formal coat" 
+        """
+
+        query_tokens = query_text.lower().split()
+
+        for category, keywords in self.category_keywords.items():
+            for keyword in keywords:
+                if keyword in query_tokens:
+                    return category
+        
+        return None # fallback if nothing matches
+
+
     
     
     # -----------------------
@@ -58,14 +111,38 @@ class ProductSearchPipeline:
         embedding = embedding / embedding.norm(dim = -1, keepdim = True)
 
         # Convert to numpy float32 for FAISS
-        return embedding.detach().cpu().numpy()
+        return embedding.detach().cpu().numpy().astype("float32")
     
+
+    def _normalize_scores(self, scores):
+        """
+            Normalize similarity scores between 0 and 1.
+
+            This ensure fair combination of text and image scores during multimodal fusion
+        """
+
+
+        min_s = min(scores)
+        max_s = max(scores)
+
+        # Avoid division by zero
+        if max_s - min_s == 0:
+            return [1.0 for _ in scores]
+
+        return [(s - min_s) / (max_s - min_s) for s in scores]
     
     def embed_text(self, text : str) -> np.ndarray:
         """
-        Generate CLIP embeddings for a single text input query
+            Generate CLIP embeddings for a single text input query
+
+            If the same query is repeated, we reuse the embedding
+            instead of recomputing it.
         """
 
+        # Check cache
+        if text in self.query_cache:
+            return self.query_cache[text]
+        
         self.load_models()
         
         # Prepare input for CLIP
@@ -79,6 +156,11 @@ class ProductSearchPipeline:
         with torch.no_grad():
             # Use CLIP feature extractor
             text_features = self.model.get_text_features(**inputs)
+        
+        embedding = self._normalize(text_features)[0]
+
+        # Store in cache
+        self.query_cache[text] = embedding
 
         return self._normalize(text_features)[0]
     
@@ -142,7 +224,14 @@ class ProductSearchPipeline:
         for i in range(0, len(image_paths), batch_size):
             batch_paths = image_paths[i : i+batch_size]
 
-            images = [Image.open(p).convert("RGB") for p in batch_paths]
+            images = []
+
+            for p in batch_paths:
+                try:
+                    img = Image.open(p).convert("RGB")
+                    images.append(img)
+                except:
+                    continue
 
             inputs = self.processor(
                 images = images,
@@ -180,16 +269,19 @@ class ProductSearchPipeline:
 
     def search_text(self, query_text, top_k = 10):
         """
-            Search products using a text query
+            Performs text based product search with dynamic filtering
 
             Steps:
                 1. Convert the query to CLIP embeddings
-                2. Search FAISS index
-                3. Return top matching product indices
+                2. Retrieve candidates from FAISS
+                3. Detect query category
+                4. Filter results based on category
+                5. Return top_k filtered results
         """
 
         self.load_models()
         self.load_indexes()
+        self.load_metadata()
 
         # Convert the query into embeddings
         # Reshape it into 2-d array so that FIASS library can perform similarity search
@@ -199,9 +291,37 @@ class ProductSearchPipeline:
         # Get "similarity scores" between query embeddings and top_k most similar text embeddings found in the index
         # Get "indices" corresponding to the top_k similar image embeddings.
         # We can use these indices to retrieve the most similar texts
-        scores, indices = self.text_index.search(query_embeddings, top_k)
+        scores, indices = self.text_index.search(query_embeddings, top_k * 5)
 
-        return indices[0], scores[0]
+        # detect the category from query
+        detected_category = self.detect_query_category(query_text)
+
+        filtered_results = []
+
+        query_tokens = query_text.lower().split()
+
+        for idx, score in zip(indices[0], scores[0]):
+            # Extract product name for keyword matching
+            product_name = str(self.metadata.iloc[idx]["productDisplayName"]).lower()
+            # Extract product type from dataset 
+            product_type = str(self.metadata.iloc[idx]["articleType"]).lower()
+
+            keyword_match = any(token in product_name for token in query_tokens)
+        
+            # If category detected then filter it out
+            if detected_category is not None:
+                if detected_category in product_type or keyword_match:
+                    filtered_results.append((idx, score))
+            else:
+                if keyword_match:
+                    filtered_results.append((idx, score))
+        
+        # Stepback if filtering too strict
+        if len(filtered_results) < top_k:
+            filtered_results = list(zip(indices[0], scores[0]))
+
+
+        return filtered_results[: top_k]
 
     
     def search_image(self, image, top_k = 10):
@@ -247,7 +367,15 @@ class ProductSearchPipeline:
         # Took larger pool (top_k*2) of candidates to ensure not missing items scoring high in one modality
         # but not make the cut off  in the initial individual search    
         if text is not None:
-            text_indices, text_scores = self.search_text(text, top_k*2)
+            # Get list of (idx, score)
+            text_results = self.search_text(text, top_k*2)
+
+            # Separate indices and scores
+            text_indices = [i for i, s in text_results]
+            text_scores = [s for i, s in text_results]
+
+            # Normalize scores
+            text_scores = self._normalize_scores(text_scores)
 
             for idx, score in zip(text_indices, text_scores):
                 final_scores[idx] = final_scores.get(idx, 0) + (alpha * score)
@@ -258,6 +386,9 @@ class ProductSearchPipeline:
         # but not make the cut off  in the initial individual search
         if image is not None:
             image_indices, image_scores = self.search_image(image, top_k * 2)
+
+            # Normalize image scores
+            image_scores = self._normalize_scores(image_scores)
 
             for idx, score in zip(image_indices, image_scores):
                 final_scores[idx] = final_scores.get(idx, 0) + ((1-alpha) * score)

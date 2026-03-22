@@ -25,6 +25,7 @@ Link: [Fashion Product Images (Small)](https://www.kaggle.com/datasets/paramagga
 - Added batch processing for scalable offline embedding
 - Ensured cosine-normalized embeddings for retrieval
 
+
 ### Step - 2 : Vector Search
 Built FAISS vector indexes to enable fast nearest-neighbor search over CLIP embeddings.
 
@@ -34,11 +35,18 @@ Indexes created:
 
 These indexes allow millisecond-level similarity search.
 
-### Step - 3 : Multimodal Search Engine
 
+### Step - 3 : Multimodal Search Engine
 Implemented full search pipeline:
 - Text search
 - Image search
 - Multimodal fusion search
 
 Search uses FAISS vector indexes built from CLIP embeddings.
+
+
+### Step - 4 : Improvements
+- Added hybrid retrieval (CLIP similarity + keyword matching)
+- Implemented score normalization for multimodal fusion so that neither text query nor image query dominates randomly 
+- Improved query understanding with token-based matching
+- Added caching for faster repeated queries
