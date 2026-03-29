@@ -6,14 +6,21 @@ import io
 # Base URl for the backend API
 API_URL = "http://127.0.0.1:8000"
 
+st.set_page_config(page_title="Product Search", layout="wide")
+
 st.title("Multimodal Product Search Engine")
 
 # -------------------------
 # User input section
 # -------------------------
 
-query = st.text_input("Enter search query")
-uploaded_file = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
+col1, col2 = st.columns(2)
+
+with col1:
+    query = st.text_input("Enter search query")
+
+with col2:
+    uploaded_file = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
 
 # If user uploads an image
 image = None
@@ -26,55 +33,60 @@ if uploaded_file is not None:
 # -------------------------
 if st.button("Search"):
 
-    try:
-        files = None
+    with st.spinner("Searching..."):
 
-        # Prepare Image for API if it exists
-        if image is not None:
-            buffered = io.BytesIO()
-            image.save(buffered, format="PNG")
-            files = {"file": ("image.png", buffered.getvalue(), "image/png")}
+        try:
+            files = None
 
-        # Decide which endpoint to call
+            # Prepare Image for API if it exists
+            if image is not None:
+                buffered = io.BytesIO()
+                image.save(buffered, format="PNG")
+                files = {"file": ("image.png", buffered.getvalue(), "image/png")}
 
-        # Multimodal Search API call
-        if image is not None and query:
-            response = requests.post(
-                f"{API_URL}/search/multimodal",
-                data={"query": query},
-                files=files
-            )
-        
-        # Image Search API call
-        elif image is not None:
-            response = requests.post(
-                f"{API_URL}/search/image",
-                files=files
-            )
+            # Decide which endpoint to call
 
-        # Text Search API call
-        else:
-            response = requests.post(
-                f"{API_URL}/search/text",
-                params={"query": query}
-            )
+            # Multimodal Search API call
+            if image is not None and query:
+                response = requests.post(
+                    f"{API_URL}/search/multimodal",
+                    data={"query": query},
+                    files=files
+                )
+            
+            # Image Search API call
+            elif image is not None:
+                response = requests.post(
+                    f"{API_URL}/search/image",
+                    files=files
+                )
 
-        # -------------------------
-        # Process API Response
-        # -------------------------
+            # Text Search API call
+            else:
+                response = requests.post(
+                    f"{API_URL}/search/text",
+                    params={"query": query}
+                )
 
-        # COnvert response into JSON and get the "results"
-        results = response.json().get("results", [])
+            # -------------------------
+            # Process API Response
+            # -------------------------
 
-        st.subheader("Results")
+            # COnvert response into JSON and get the "results"
+            results = response.json().get("results", [])
 
-        for item in results:
-            try:
-                idx, score = item
-                # Display formatted result
-                st.write(f"Product {idx}, \t Score: {round(float(score), 3)}")
-            except:
-                st.write(item)
+            st.subheader("Results")
 
-    except Exception as e:
-        st.error(f"Error: {str(e)}")
+            if len(results) == 0:
+                st.warning("No results found")
+
+            for item in results:
+                try:
+                    idx, score = item
+                    # Display formatted result
+                    st.write(f"Product {idx}, \t Score: {round(float(score), 3)}")
+                except:
+                    st.write(item)
+
+        except Exception as e:
+            st.error(f"Error: {str(e)}")

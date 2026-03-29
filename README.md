@@ -1,5 +1,5 @@
 # Product Search Engine
-End-to-end multimodal product search engine using Computer Vision and NLP, built with CLIP, FastAPI, &amp; Gradio.  This repository documents the complete ML lifecycle, starting with data ingestion, preprocessing, and exploratory analysis on Google Colab
+End-to-end **multimodal product search engine** that allows the user to search products using test, images, or both, built with **CLIP (Computer Vision + NLP)**, **FAISS**, **FastAPI + Streamlit**.  This repository documents the complete ML lifecycle, starting with data ingestion, preprocessing, and exploratory analysis on Google Colab
 
 
 ## Project Overview
@@ -50,3 +50,40 @@ Search uses FAISS vector indexes built from CLIP embeddings.
 - Implemented score normalization for multimodal fusion so that neither text query nor image query dominates randomly 
 - Improved query understanding with token-based matching
 - Added caching for faster repeated queries
+
+
+### Step - 5 : Deployment & UI
+
+#### FastAPI Backend
+Handles all inference requests
+- Supports:
+  - Text search
+  - Image search
+  - Multimodal search
+- Loads FAISS indexes and CLIP model for the real time retrieval
+
+#### Streamlit Frontend
+- Interactive UI for users
+- Supports:
+  - Text queries
+  - Image uploads
+  - Combined multimodal search
+- Communicates with FastAPI via REST API calls
+
+
+### How to Run the Full System
+
+#### Start Backend API
+
+```bash
+uvicorn src.api:app --reload
+```
+
+Runs at : http://127.0.0.1:8000
+
+#### Start Frontend UI
+```bash
+streamlit run src/ui.py
+```
+
+Runs at : streamlit run src/streamlit_ui.py

@@ -135,11 +135,11 @@ class ProductSearchPipeline:
         """
             Generate CLIP embeddings for a single text input query
 
-            If the same query is repeated, we reuse the embedding
-            instead of recomputing it.
+            If the same query is repeated, we reuse the embedding 
+            through caching instead of recomputing it.
         """
 
-        # Check cache
+        # Return cached result if exists
         if text in self.query_cache:
             return self.query_cache[text]
         
@@ -157,12 +157,13 @@ class ProductSearchPipeline:
             # Use CLIP feature extractor
             text_features = self.model.get_text_features(**inputs)
         
+        # Normalize the embeddings
         embedding = self._normalize(text_features)[0]
 
         # Store in cache
         self.query_cache[text] = embedding
 
-        return self._normalize(text_features)[0]
+        return embedding
     
 
     def embed_image(self, image: Image.Image) -> np.ndarray:
