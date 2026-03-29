@@ -223,3 +223,9 @@ models/
 # Embeddings & Indexes
 embeddings/
 faiss_index/
+
+# Images folder
+images/
+
+# Virtual Environment
+venv_productSearchEngine
