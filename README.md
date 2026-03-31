@@ -86,4 +86,4 @@ Runs at : http://127.0.0.1:8000
 streamlit run src/ui.py
 ```
 
-Runs at : streamlit run src/streamlit_ui.py
+Runs at : http://localhost:8501
