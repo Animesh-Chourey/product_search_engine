@@ -16,7 +16,7 @@ app = FastAPI(
 )
 
 # Initialize pipeline
-pipeline = ProductSearchPipeline(project_dir="../")
+pipeline = ProductSearchPipeline(project_dir=".")
 
 
 # ---------------------------
@@ -38,7 +38,11 @@ def search_text(query : str):
 
     results = pipeline.search_text(query, top_k = 5)
 
-    return {"results" : results}
+    # Convert the numpy types to Python types
+    formatted_results = [
+        ( int(idx), float(score) ) for idx, score in results 
+    ]
+    return {"results" : formatted_results}
 
 
 # ---------------------------
@@ -83,4 +87,9 @@ async def search_multimodal(
         top_k=5
     )
 
-    return {"results" : results}
+    
+    formatted_results = [
+    (int(idx), float(score)) for idx, score in results
+    ]
+
+    return {"results": formatted_results}
