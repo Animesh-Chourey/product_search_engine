@@ -38,10 +38,27 @@ def search_text(query : str):
 
     results = pipeline.search_text(query, top_k = 5)
 
-    # Convert the numpy types to Python types
-    formatted_results = [
-        ( int(idx), float(score) ) for idx, score in results 
-    ]
+    # Load metadata
+    pipeline.load_metadata()
+
+    formatted_results = []
+
+    for idx, score in results:
+        idx = int(idx)
+        score = float(score)
+
+        product = pipeline.metadata.iloc[idx]
+
+        # Build structured response
+        formatted_results.append({
+            "idx" : idx,
+            "score" : score,
+            "name" : product["productDisplayName"],
+            "category" : product["articleType"],
+            "image_path" : f"images/{idx}.jpg"
+        })
+
+    
     return {"results" : formatted_results}
 
 
@@ -87,7 +104,7 @@ async def search_multimodal(
         top_k=5
     )
 
-    
+
     formatted_results = [
     (int(idx), float(score)) for idx, score in results
     ]

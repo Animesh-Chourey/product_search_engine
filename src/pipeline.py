@@ -67,24 +67,32 @@ class ProductSearchPipeline:
 
     def detect_query_category(self, query_text):
         """
-            Improve category detection using token based matching
-
-            Handles variation like:
-            - "running sneakers"
-            - "formal coat" 
+            Improve category detection using substring + semantic matching
         """
 
-        query_tokens = query_text.lower().split()
+        query_text = query_text.lower()
 
         for category, keywords in self.category_keywords.items():
             for keyword in keywords:
-                if keyword in query_tokens:
+                if keyword in query_text:
                     return category
         
         return None # fallback if nothing matches
-
-
     
+    def detect_color(self, query_text):
+        """
+            Extract color from query for better filtering of the products
+        """
+
+        colors = ["black", "blue", "green", "yellow", "orange", "red", "purple", "pink", "white", "brown", "grey"]
+
+        query_text = query_text.lower()
+
+        for color in colors:
+            if color in query_text:
+                return color
+            
+        return None
     
     # -----------------------
     # Embedding utilities
@@ -272,6 +280,11 @@ class ProductSearchPipeline:
         """
             Performs text based product search with dynamic filtering
 
+            Searches using:
+                - category filtering
+                - color filtering
+                - keyword matching
+                - re-ranking
             Steps:
                 1. Convert the query to CLIP embeddings
                 2. Retrieve candidates from FAISS
@@ -292,37 +305,52 @@ class ProductSearchPipeline:
         # Get "similarity scores" between query embeddings and top_k most similar text embeddings found in the index
         # Get "indices" corresponding to the top_k similar image embeddings.
         # We can use these indices to retrieve the most similar texts
-        scores, indices = self.text_index.search(query_embeddings, top_k * 5)
+        scores, indices = self.text_index.search(query_embeddings, top_k * 10)
 
-        # detect the category from query
+        # detect the category from the query
         detected_category = self.detect_query_category(query_text)
 
-        filtered_results = []
+        # detect color from the query
+        detected_color = self.detect_color(query_text)
 
-        query_tokens = query_text.lower().split()
+        query_tokens = query_text.lower().split() 
+
+        results = []
 
         for idx, score in zip(indices[0], scores[0]):
+
+            product = self.metadata.iloc[idx]
+
             # Extract product name for keyword matching
             product_name = str(self.metadata.iloc[idx]["productDisplayName"]).lower()
             # Extract product type from dataset 
             product_type = str(self.metadata.iloc[idx]["articleType"]).lower()
 
+            # Matching category and color
             keyword_match = any(token in product_name for token in query_tokens)
-        
-            # If category detected then filter it out
-            if detected_category is not None:
-                if detected_category in product_type or keyword_match:
-                    filtered_results.append((idx, score))
-            else:
-                if keyword_match:
-                    filtered_results.append((idx, score))
-        
-        # Stepback if filtering too strict
-        if len(filtered_results) < top_k:
-            filtered_results = list(zip(indices[0], scores[0]))
+            category_match = detected_category and detected_category in product_type
+            color_match = detected_color and detected_color in product_name
 
+            # Re-ranking score boost
+            boost = 0
 
-        return filtered_results[: top_k]
+            if category_match:
+                boost += 2.0   # strong signal
+
+            if keyword_match:
+                boost += 1.5
+
+            if color_match:
+                boost += 1.0
+
+            final_score = score + boost
+
+            results.append((idx, final_score))
+
+        # Sort results
+        results = sorted(results, key = lambda x:x[1], reverse = True)
+
+        return results[: top_k]
 
     
     def search_image(self, image, top_k = 10):

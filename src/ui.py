@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 from PIL import Image
 import io
+import os
 
 # Base URl for the backend API
 API_URL = "http://127.0.0.1:8000"
@@ -80,13 +81,34 @@ if st.button("Search"):
             if len(results) == 0:
                 st.warning("No results found")
 
-            for item in results:
-                try:
-                    idx, score = item
-                    # Display formatted result
-                    st.write(f"Product {idx}, \t Score: {round(float(score), 3)}")
-                except:
-                    st.write(item)
+            # Display results in grid layout
+            cols = st.columns(5)  # 5 products per row
+
+            for i, item in enumerate(results):
+                with cols[i % 5]:
+                    try:
+                        # Extract data from API response
+                        product_id = item["idx"]
+                        score = item["score"]
+                        name = item["name"]
+                        category = item["category"]
+                        image_path = os.path.join(os.getcwd(), "images", f"{product_id}.jpg")
+
+
+                        # Display image if exists
+                        if os.path.exists(image_path):
+                            st.image(image_path, width=150)
+                        else:
+                            st.write("No Image")
+
+                        # Display product info
+                        st.markdown(f"**{name}**")
+                        st.caption(f"{category}")
+                        st.write(f"Score: {score}")
+
+                    except Exception as e:
+                        st.error(f"Error displaying item: {e}")
+                        st.write(item)
 
         except Exception as e:
             st.error(f"Error: {str(e)}")
